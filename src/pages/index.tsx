@@ -48,7 +48,7 @@ const fallbackIndex: RepositoryIndex = {
     name: "LazyCat 第三方仓库",
     description: "基于 GitHub Pages 的 LazyCat 应用仓库。",
     homepage: "",
-    source: "https://github.com/your-github-name/lur",
+    source: "https://github.com/zerokaze420/lur",
     commit: "local",
     run_number: "local",
     generated_at: new Date().toISOString(),
@@ -63,7 +63,7 @@ const fallbackIndex: RepositoryIndex = {
       summary: "不依赖 lzc-cli 构建的最小静态 LPK。",
       categories: ["demo", "static"],
       min_os_version: "1.5.0",
-      homepage: "https://github.com/your-github-name/lur",
+      homepage: "https://github.com/zerokaze420/lur",
       license: "MIT",
       author: "LazyCat Repository Maintainers",
       locales: {
@@ -82,7 +82,7 @@ const fallbackIndex: RepositoryIndex = {
         size: 0,
         sha256: "generated-by-github-actions",
         download_url:
-          "https://github.com/your-github-name/lur/releases/download/hello-lazycat-v0.1.0/hello-lazycat-0.1.0.lpk",
+          "https://github.com/zerokaze420/lur/releases/download/hello-lazycat-v0.1.0/hello-lazycat-0.1.0.lpk",
       },
       source: "apps/hello-lazycat",
     },

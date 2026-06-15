@@ -15,7 +15,7 @@ export const siteConfig = {
   ],
   navMenuItems: [],
   links: {
-    github: "https://github.com/your-github-name/lur",
+    github: "https://github.com/zerokaze420/lur",
     repository: "./repository.json",
   },
 };

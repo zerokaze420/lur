@@ -83,6 +83,11 @@ bun run dev
 `.github/workflows/pages-and-release.yml`。提交到 `main` 后会自动构建 LPK、
 创建/更新 GitHub Release，并部署 GitHub Pages；也可以在 Actions 页面手动触发。
 
+如果希望 workflow 自动启用 GitHub Pages，需要在仓库 secrets 里添加
+`PAGES_TOKEN`。这个 token 不能是默认 `GITHUB_TOKEN`，需要具备仓库 Pages
+写入权限；否则请在 GitHub 仓库设置中手动启用 Pages，并选择 GitHub Actions
+作为来源。
+
 工作流已经声明需要的权限：
 
 - `contents: write`：创建 release tag 和上传 release asset
