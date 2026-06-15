@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Card, Chip, Input, Link, Separator } from "@heroui/react";
 
 import { useI18n } from "@/i18n";
 import DefaultLayout from "@/layouts/default";
@@ -184,139 +185,139 @@ export default function IndexPage() {
     <DefaultLayout>
       <section className="grid gap-8 lg:grid-cols-[1fr_360px]">
         <div>
-          <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#1f7a56]">
+          <Chip color="success" size="sm" variant="soft">
             {t("githubPagesRepository")}
-          </p>
-          <h1 className="max-w-4xl text-4xl font-semibold leading-tight text-[#172033] sm:text-5xl">
+          </Chip>
+          <h1 className="mt-3 max-w-4xl text-4xl font-semibold leading-tight text-foreground sm:text-5xl">
             {t("builtFromYaml")}
           </h1>
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-[#5a687d]">
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-default-600">
             {t("catalogDescription")}
           </p>
         </div>
 
-        <aside className="self-start border border-[#dbe2ee] bg-white p-5 shadow-sm">
-          <dl className="grid gap-4 text-sm">
-            <div>
-              <dt className="text-[#65738a]">{t("repository")}</dt>
-              <dd className="mt-1 font-medium text-[#172033]">
-                {index.repository.name}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[#65738a]">{t("appCount")}</dt>
-              <dd className="mt-1 font-medium text-[#172033]">
-                {index.apps.length}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[#65738a]">{t("generatedAt")}</dt>
-              <dd className="mt-1 font-medium text-[#172033]">
-                {new Date(index.repository.generated_at).toLocaleString()}
-              </dd>
-            </div>
-          </dl>
-        </aside>
+        <Card className="self-start">
+          <Card.Content>
+            <dl className="grid gap-4 text-sm">
+              <div>
+                <dt className="text-default-500">{t("repository")}</dt>
+                <dd className="mt-1 font-medium text-foreground">
+                  {index.repository.name}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-default-500">{t("appCount")}</dt>
+                <dd className="mt-1 font-medium text-foreground">
+                  {index.apps.length}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-default-500">{t("generatedAt")}</dt>
+                <dd className="mt-1 font-medium text-foreground">
+                  {new Date(index.repository.generated_at).toLocaleString()}
+                </dd>
+              </div>
+            </dl>
+          </Card.Content>
+        </Card>
       </section>
 
       <section className="mt-10">
-        <div className="flex flex-col gap-3 border-y border-[#dbe2ee] py-5 sm:flex-row sm:items-center sm:justify-between">
+        <Separator />
+        <div className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-[#172033]">
+            <h2 className="text-xl font-semibold text-foreground">
               {t("packages")}
             </h2>
             {loadError ? (
-              <p className="mt-1 text-sm text-[#8a5c00]">{loadError}</p>
+              <p className="mt-1 text-sm text-warning-700">{loadError}</p>
             ) : (
-              <p className="mt-1 text-sm text-[#65738a]">
+              <p className="mt-1 text-sm text-default-500">
                 {t("downloadsFromReleases")}
               </p>
             )}
           </div>
-          <input
+          <Input
             aria-label={t("searchPackages")}
-            className="h-11 w-full border border-[#cbd5e3] bg-white px-3 text-sm outline-none transition focus:border-[#0b5cad] sm:w-80"
+            className="w-full sm:w-80"
             placeholder={t("searchPlaceholder")}
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
+        <Separator />
 
-        <div className="divide-y divide-[#dbe2ee]">
+        <div className="grid gap-4 pt-5">
           {filteredApps.map((app) => (
-            <article
-              key={app.id}
-              className="grid gap-5 py-6 lg:grid-cols-[1fr_240px]"
-            >
-              <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h3 className="text-2xl font-semibold text-[#172033]">
-                    {app.locales?.[locale]?.name ?? app.name}
-                  </h3>
-                  <span className="border border-[#b9c7d9] px-2 py-1 text-xs font-medium text-[#516076]">
-                    v{app.version}
-                  </span>
+            <Card key={app.id}>
+              <Card.Content className="grid gap-5 lg:grid-cols-[1fr_240px]">
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="text-2xl font-semibold text-foreground">
+                      {app.locales?.[locale]?.name ?? app.name}
+                    </h3>
+                    <Chip size="sm" variant="secondary">
+                      v{app.version}
+                    </Chip>
+                  </div>
+                  <p className="mt-2 max-w-3xl text-default-600">
+                    {app.locales?.[locale]?.description ??
+                      (app.summary || app.description)}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {app.categories.map((category) => (
+                      <Chip key={category} color="accent" size="sm" variant="soft">
+                        {category}
+                      </Chip>
+                    ))}
+                  </div>
+                  <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-default-500">{t("packageId")}</dt>
+                      <dd className="mt-1 break-all font-mono text-foreground">
+                        {app.package}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-default-500">SHA256</dt>
+                      <dd className="mt-1 break-all font-mono text-foreground">
+                        {shortSha(app.release.sha256)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-default-500">{t("minimumOs")}</dt>
+                      <dd className="mt-1 text-foreground">
+                        {app.min_os_version || t("unspecified")}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-default-500">{t("size")}</dt>
+                      <dd className="mt-1 text-foreground">
+                        {formatBytes(app.release.size, t("pending"))}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
-                <p className="mt-2 max-w-3xl text-[#5a687d]">
-                  {app.locales?.[locale]?.description ??
-                    (app.summary || app.description)}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {app.categories.map((category) => (
-                    <span
-                      key={category}
-                      className="bg-[#eaf1f8] px-2.5 py-1 text-xs font-medium text-[#36506f]"
-                    >
-                      {category}
-                    </span>
-                  ))}
-                </div>
-                <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt className="text-[#65738a]">{t("packageId")}</dt>
-                    <dd className="mt-1 break-all font-mono text-[#172033]">
-                      {app.package}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#65738a]">SHA256</dt>
-                    <dd className="mt-1 break-all font-mono text-[#172033]">
-                      {shortSha(app.release.sha256)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#65738a]">{t("minimumOs")}</dt>
-                    <dd className="mt-1 text-[#172033]">
-                      {app.min_os_version || t("unspecified")}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#65738a]">{t("size")}</dt>
-                    <dd className="mt-1 text-[#172033]">
-                      {formatBytes(app.release.size, t("pending"))}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
 
-              <div className="flex items-start gap-3 lg:flex-col">
-                <a
-                  className="inline-flex h-11 items-center justify-center bg-[#0b5cad] px-5 text-sm font-semibold text-white transition hover:bg-[#084b8d]"
-                  href={app.release.download_url}
-                >
-                  {t("downloadLpk")}
-                </a>
-                <a
-                  className="inline-flex h-11 items-center justify-center border border-[#b9c7d9] px-5 text-sm font-semibold text-[#284158] transition hover:border-[#0b5cad] hover:text-[#0b5cad]"
-                  href={sourceHref(app, index.repository.source)}
-                  rel="noopener noreferrer"
-                  target="_blank"
-                >
-                  {t("source")}
-                </a>
-              </div>
-            </article>
+                <div className="flex items-start gap-3 lg:flex-col">
+                  <Link
+                    className="inline-flex min-h-10 items-center rounded-medium bg-primary px-4 text-sm font-semibold text-primary-foreground"
+                    href={app.release.download_url}
+                  >
+                    {t("downloadLpk")}
+                  </Link>
+                  <Link
+                    className="inline-flex min-h-10 items-center rounded-medium border border-default-300 px-4 text-sm font-semibold text-default-700"
+                    href={sourceHref(app, index.repository.source)}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    {t("source")}
+                  </Link>
+                </div>
+              </Card.Content>
+            </Card>
           ))}
         </div>
       </section>

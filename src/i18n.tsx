@@ -27,6 +27,7 @@ const messages: Record<Locale, Messages> = {
       "修改 apps.yml 添加应用。工作流会手工生成 LPK 归档、发布 release 产物，并更新这个静态目录。",
     downloadLpk: "下载 LPK",
     downloadsFromReleases: "下载链接指向 GitHub Release 中的历史产物。",
+    docsNav: "文档",
     generatedAt: "生成时间",
     githubPagesRepository: "GitHub Pages 仓库",
     indexJson: "索引 JSON",
@@ -61,6 +62,7 @@ const messages: Record<Locale, Messages> = {
     downloadLpk: "Download LPK",
     downloadsFromReleases:
       "Downloads point to historical GitHub Release assets.",
+    docsNav: "Docs",
     generatedAt: "Generated",
     githubPagesRepository: "GitHub Pages Repository",
     indexJson: "Index JSON",

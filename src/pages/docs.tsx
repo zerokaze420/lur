@@ -1,3 +1,5 @@
+import { Card, Chip, Code } from "@heroui/react";
+
 import DefaultLayout from "@/layouts/default";
 import { useI18n } from "@/i18n";
 
@@ -84,87 +86,100 @@ export default function DocsPage() {
     <DefaultLayout>
       <section className="grid gap-8 lg:grid-cols-[1fr_360px]">
         <div>
-          <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#1f7a56]">
+          <Chip color="success" size="sm" variant="soft">
             {isZh ? "添加应用" : "Add Apps"}
-          </p>
-          <h1 className="max-w-4xl text-4xl font-semibold leading-tight text-[#172033] sm:text-5xl">
+          </Chip>
+          <h1 className="mt-3 max-w-4xl text-4xl font-semibold leading-tight text-foreground sm:text-5xl">
             {isZh
               ? "默认使用远程 Git source，通过 PR 合并后自动构建。"
               : "Use remote Git sources by default and publish after PR merge."}
           </h1>
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-[#5a687d]">
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-default-600">
             {isZh
               ? "推荐方案 B：应用源码留在自己的仓库，本仓库只记录 Git URL、固定 rev 和构建命令。这样无需 vendor 源码，也不需要 submodule。"
               : "Recommended path B keeps app source in its own repository. This repository only records the Git URL, pinned rev and build command, without vendoring or submodules."}
           </p>
         </div>
 
-        <aside className="self-start border border-[#dbe2ee] bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#516076]">
-            {isZh ? "发布产物" : "Published Artifacts"}
-          </h2>
-          <dl className="mt-4 grid gap-3 text-sm">
-            <div>
-              <dt className="text-[#65738a]">Release tag</dt>
-              <dd className="mt-1 font-mono text-[#172033]">
-                &lt;app-id&gt;-v&lt;version&gt;
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[#65738a]">LPK file</dt>
-              <dd className="mt-1 font-mono text-[#172033]">
-                &lt;app-id&gt;-&lt;version&gt;.lpk
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[#65738a]">Index</dt>
-              <dd className="mt-1 font-mono text-[#172033]">
-                dist/repository.json
-              </dd>
-            </div>
-          </dl>
-        </aside>
+        <Card className="self-start">
+          <Card.Header>
+            <Card.Title className="text-sm uppercase tracking-[0.14em] text-default-600">
+              {isZh ? "发布产物" : "Published Artifacts"}
+            </Card.Title>
+          </Card.Header>
+          <Card.Content>
+            <dl className="grid gap-3 text-sm">
+              <div>
+                <dt className="text-default-500">Release tag</dt>
+                <dd className="mt-1">
+                  <Code>&lt;app-id&gt;-v&lt;version&gt;</Code>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-default-500">LPK file</dt>
+                <dd className="mt-1">
+                  <Code>&lt;app-id&gt;-&lt;version&gt;.lpk</Code>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-default-500">Index</dt>
+                <dd className="mt-1">
+                  <Code>dist/repository.json</Code>
+                </dd>
+              </div>
+            </dl>
+          </Card.Content>
+        </Card>
       </section>
 
       <section className="mt-10 grid gap-6">
         {steps.map((step, index) => (
-          <article
-            key={step.title}
-            className="grid gap-4 border-t border-[#dbe2ee] pt-6 md:grid-cols-[96px_1fr]"
-          >
-            <div className="font-mono text-3xl font-semibold text-[#8bb8dd]">
-              {String(index + 1).padStart(2, "0")}
-            </div>
-            <div>
-              <h2 className="text-2xl font-semibold text-[#172033]">
-                {step.title}
-              </h2>
-              <p className="mt-3 max-w-3xl leading-7 text-[#5a687d]">
-                {step.body}
-              </p>
-            </div>
-          </article>
+          <Card key={step.title}>
+            <Card.Content className="grid gap-4 md:grid-cols-[96px_1fr]">
+              <Chip color="accent" size="lg" variant="soft">
+                {String(index + 1).padStart(2, "0")}
+              </Chip>
+              <div>
+                <Card.Title className="text-2xl">{step.title}</Card.Title>
+                <Card.Description className="mt-3 max-w-3xl leading-7">
+                  {step.body}
+                </Card.Description>
+              </div>
+            </Card.Content>
+          </Card>
         ))}
       </section>
 
       <section className="mt-10 grid gap-6 lg:grid-cols-2">
-        <article className="border-t border-[#dbe2ee] pt-6">
-          <h2 className="text-2xl font-semibold text-[#172033]">
-            {isZh ? "apps.yml 示例" : "apps.yml Example"}
-          </h2>
-          <pre className="mt-4 overflow-x-auto bg-[#172033] p-5 text-sm leading-6 text-[#edf4fb]">
-            <code>{configExample}</code>
-          </pre>
-        </article>
+        <Card>
+          <Card.Header>
+            <Card.Title className="text-2xl">
+              {isZh ? "apps.yml 示例" : "apps.yml Example"}
+            </Card.Title>
+          </Card.Header>
+          <Card.Content>
+            <pre className="overflow-x-auto text-sm leading-6">
+              <Code className="block whitespace-pre bg-transparent p-0">
+                {configExample}
+              </Code>
+            </pre>
+          </Card.Content>
+        </Card>
 
-        <article className="border-t border-[#dbe2ee] pt-6">
-          <h2 className="text-2xl font-semibold text-[#172033]">
-            {isZh ? "Fork 到 PR 命令" : "Fork To PR Commands"}
-          </h2>
-          <pre className="mt-4 overflow-x-auto bg-[#172033] p-5 text-sm leading-6 text-[#edf4fb]">
-            <code>{commandsExample}</code>
-          </pre>
-        </article>
+        <Card>
+          <Card.Header>
+            <Card.Title className="text-2xl">
+              {isZh ? "Fork 到 PR 命令" : "Fork To PR Commands"}
+            </Card.Title>
+          </Card.Header>
+          <Card.Content>
+            <pre className="overflow-x-auto text-sm leading-6">
+              <Code className="block whitespace-pre bg-transparent p-0">
+                {commandsExample}
+              </Code>
+            </pre>
+          </Card.Content>
+        </Card>
       </section>
     </DefaultLayout>
   );

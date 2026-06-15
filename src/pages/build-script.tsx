@@ -1,3 +1,5 @@
+import { Card, Chip, Code, Separator } from "@heroui/react";
+
 import DefaultLayout from "@/layouts/default";
 import { useI18n } from "@/i18n";
 
@@ -31,6 +33,29 @@ const zhSections = [
   },
 ];
 
+const zhPipeline = [
+  {
+    title: "读取仓库清单",
+    body: "脚本先解析 apps.yml，校验每个应用的 id、source、summary、categories 与 build 字段，形成后续构建使用的标准应用描述。",
+  },
+  {
+    title: "准备源码目录",
+    body: "本地 source 直接解析为仓库内目录；远程 Git source 会 clone 到临时构建目录，并 checkout 到固定 rev 或 ref，保证输入可复现。",
+  },
+  {
+    title: "生成或收集 LPK",
+    body: "content 模式把 manifest.yml、package.yml 和 content/ 压成 LPK；command 模式执行配置的命令，再用 artifact glob 找到唯一 LPK。",
+  },
+  {
+    title: "计算发布元数据",
+    body: "脚本读取 package.yml 里的版本和展示信息，计算 LPK 的 size 与 sha256，并按 <app-id>-v<version> 生成 Release tag。",
+  },
+  {
+    title: "写入静态索引",
+    body: "所有 LPK 复制到 build/lpk 后，脚本生成 dist/repository.json。GitHub Pages 只需要托管这个 JSON，下载地址指向 GitHub Release。",
+  },
+];
+
 const enSections = [
   {
     title: "Input Config",
@@ -61,6 +86,29 @@ const enSections = [
   },
 ];
 
+const enPipeline = [
+  {
+    title: "Read The Catalog",
+    body: "The script parses apps.yml, validates id, source, summary, categories and build fields, then normalizes each app into the internal build description.",
+  },
+  {
+    title: "Prepare Source",
+    body: "Local sources resolve to repository paths. Remote Git sources are cloned into a temporary build directory and checked out to the pinned rev or ref for reproducible input.",
+  },
+  {
+    title: "Create Or Collect LPK",
+    body: "content mode zips manifest.yml, package.yml and content/ into an LPK. command mode runs the configured command, then finds exactly one LPK through the artifact glob.",
+  },
+  {
+    title: "Compute Release Metadata",
+    body: "The script reads version and display metadata from package.yml, computes size and sha256, and derives the Release tag as <app-id>-v<version>.",
+  },
+  {
+    title: "Write Static Index",
+    body: "After LPKs are copied into build/lpk, the script writes dist/repository.json. GitHub Pages hosts the JSON while downloads point to GitHub Release assets.",
+  },
+];
+
 const configExample = `apps:
   - id: attic
     source:
@@ -83,73 +131,115 @@ export default function BuildScriptPage() {
   const { locale, t } = useI18n();
   const isZh = locale === "zh-CN";
   const sections = isZh ? zhSections : enSections;
+  const pipeline = isZh ? zhPipeline : enPipeline;
 
   return (
     <DefaultLayout>
       <section className="grid gap-8 lg:grid-cols-[1fr_360px]">
         <div>
-          <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#1f7a56]">
+          <Chip color="success" size="sm" variant="soft">
             {t("buildScriptEyebrow")}
-          </p>
-          <h1 className="max-w-4xl text-4xl font-semibold leading-tight text-[#172033] sm:text-5xl">
+          </Chip>
+          <h1 className="mt-3 max-w-4xl text-4xl font-semibold leading-tight text-foreground sm:text-5xl">
             {t("buildScriptTitle")}
           </h1>
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-[#5a687d]">
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-default-600">
             {t("buildScriptDescription")}
           </p>
         </div>
 
-        <aside className="self-start border border-[#dbe2ee] bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#516076]">
-            {t("buildScriptFiles")}
+        <Card className="self-start">
+          <Card.Header>
+            <Card.Title className="text-sm uppercase tracking-[0.14em] text-default-600">
+              {t("buildScriptFiles")}
+            </Card.Title>
+          </Card.Header>
+          <Card.Content>
+            <ul className="grid gap-3 text-sm">
+              {[
+                "apps.yml",
+                "scripts/lazycat-repository.mjs",
+                "dist/repository.json",
+                "build/lpk/*.lpk",
+              ].map((file) => (
+                <li key={file}>
+                  <Code>{file}</Code>
+                </li>
+              ))}
+            </ul>
+          </Card.Content>
+        </Card>
+      </section>
+
+      <section className="mt-10">
+        <div className="mb-5">
+          <h2 className="text-2xl font-semibold text-foreground">
+            {isZh ? "处理流程" : "Build Pipeline"}
           </h2>
-          <ul className="mt-4 grid gap-3 text-sm text-[#172033]">
-            <li>
-              <code>apps.yml</code>
-            </li>
-            <li>
-              <code>scripts/lazycat-repository.mjs</code>
-            </li>
-            <li>
-              <code>dist/repository.json</code>
-            </li>
-            <li>
-              <code>build/lpk/*.lpk</code>
-            </li>
-          </ul>
-        </aside>
+          <p className="mt-2 max-w-3xl text-default-600">
+            {isZh
+              ? "核心原则是把发布输入固定下来，再把所有应用统一转换成 Release 产物和静态仓库索引。"
+              : "The core idea is to pin publishing inputs, then normalize every app into Release assets and one static repository index."}
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-5">
+          {pipeline.map((step, index) => (
+            <Card key={step.title}>
+              <Card.Header>
+                <Chip color="accent" size="sm" variant="soft">
+                  {String(index + 1).padStart(2, "0")}
+                </Chip>
+              </Card.Header>
+              <Card.Content>
+                <Card.Title className="text-lg">{step.title}</Card.Title>
+                <Card.Description className="mt-2 leading-6">
+                  {step.body}
+                </Card.Description>
+              </Card.Content>
+            </Card>
+          ))}
+        </div>
       </section>
 
       <section className="mt-10 grid gap-6">
         {sections.map((section) => (
-          <article
-            key={section.title}
-            className="border-t border-[#dbe2ee] pt-6"
-          >
-            <h2 className="text-2xl font-semibold text-[#172033]">
-              {section.title}
-            </h2>
-            <p className="mt-3 max-w-3xl leading-7 text-[#5a687d]">
-              {section.body}
-            </p>
-            <ul className="mt-4 grid gap-2 text-sm text-[#36506f]">
-              {section.items.map((item) => (
-                <li key={item} className="border-l-2 border-[#8bb8dd] pl-3">
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </article>
+          <Card key={section.title}>
+            <Card.Header>
+              <Card.Title className="text-2xl">{section.title}</Card.Title>
+            </Card.Header>
+            <Card.Content>
+              <p className="max-w-3xl leading-7 text-default-600">
+                {section.body}
+              </p>
+              <ul className="mt-4 grid gap-2 text-sm text-default-700">
+                {section.items.map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <Chip color="accent" size="sm" variant="soft">
+                      -
+                    </Chip>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card.Content>
+          </Card>
         ))}
       </section>
 
-      <section className="mt-10 border-y border-[#dbe2ee] py-6">
-        <h2 className="text-2xl font-semibold text-[#172033]">
+      <section className="mt-10 py-6">
+        <Separator />
+        <h2 className="mt-6 text-2xl font-semibold text-foreground">
           {t("buildScriptExample")}
         </h2>
-        <pre className="mt-4 overflow-x-auto bg-[#172033] p-5 text-sm leading-6 text-[#edf4fb]">
-          <code>{configExample}</code>
-        </pre>
+        <Card className="mt-4">
+          <Card.Content>
+            <pre className="overflow-x-auto text-sm leading-6">
+              <Code className="block whitespace-pre bg-transparent p-0">
+                {configExample}
+              </Code>
+            </pre>
+          </Card.Content>
+        </Card>
       </section>
     </DefaultLayout>
   );
