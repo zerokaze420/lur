@@ -21,6 +21,12 @@ export const Navbar = () => {
         <div className="flex items-center gap-4">
           <a
             className="hidden text-sm font-medium text-[#516076] transition-colors hover:text-[#0b5cad] sm:inline-flex"
+            href="./build-script"
+          >
+            {t("buildScriptNav")}
+          </a>
+          <a
+            className="hidden text-sm font-medium text-[#516076] transition-colors hover:text-[#0b5cad] sm:inline-flex"
             href={siteConfig.links.repository}
           >
             {t("indexJson")}

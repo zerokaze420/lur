@@ -11,3 +11,19 @@ apps:
     categories:
       - demo
       - static
+  - id: attic
+    source:
+      git: https://github.com/zerokaze420/lazy-attic.git
+      rev: 402385eb48c8af545dda8099c65f8d3ef19eaf38
+    summary: 带轻量 Web 控制台的 Nix 二进制缓存服务器。
+    categories:
+      - developer
+      - cache
+      - nix
+    build:
+      type: command
+      command:
+        - nix
+        - build
+        - .#lpk
+      artifact: result/*.lpk

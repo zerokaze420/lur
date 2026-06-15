@@ -3,33 +3,20 @@
 这是一个基于 GitHub Actions 和 GitHub Pages 的 LazyCat 第三方 LPK
 仓库模板。
 
-应用列表维护在 `apps.yml`。每个应用源码目录包含 LazyCat 运行配置和静态内容：
-
-```text
-apps/<app-id>/
-├── manifest.yml
-├── package.yml
-└── content/
-```
-
-工作流不使用 `lzc-cli`，而是直接按 LPK tar 结构手工打包：
-
-```text
-release.lpk
-├── manifest.yml
-├── package.yml
-└── content.tar
-```
+应用列表维护在 `apps.yml`。默认推荐引用远程 Git 源码并固定 commit `rev`，
+构建脚本会在 GitHub Actions 中拉取源码、执行应用自己的构建命令、收集 `.lpk`
+产物并生成仓库索引。
 
 ## 工作方式
 
-1. 修改 `apps.yml`，添加应用条目。
-2. 在 `apps/<app-id>/` 下添加应用文件。
-3. 推送到 `main`，或手动运行 GitHub Actions。
-4. GitHub Actions 在 `build/lpk` 下生成 `.lpk` 文件。
-5. 每个 `.lpk` 会上传到类似 `<app-id>-v<version>` 的 GitHub Release。
-6. 静态前端和 `repository.json` 会部署到 GitHub Pages。
-7. 前端下载按钮指向 GitHub Release 历史产物，所以只要 release tag
+1. 在应用自己的仓库中准备 LazyCat 打包配置，并保证能生成 `.lpk`。
+2. Fork 本仓库，修改 `apps.yml`，添加远程 Git source 和构建命令。
+3. 提交分支并向本仓库发起 Pull Request。
+4. PR 合并到 `main` 后，GitHub Actions 自动构建 LPK 和仓库索引。
+5. GitHub Actions 在 `build/lpk` 下生成 `.lpk` 文件。
+6. 每个 `.lpk` 会上传到类似 `<app-id>-v<version>` 的 GitHub Release。
+7. 静态前端和 `repository.json` 会部署到 GitHub Pages。
+8. 前端下载按钮指向 GitHub Release 历史产物，所以只要 release tag
    存在，旧版本也能继续下载。
 
 ## 配置
@@ -44,16 +31,27 @@ repository:
   owner: <owner>
   repo: <repo>
 apps:
-  - id: hello-lazycat
-    source: apps/hello-lazycat
-    summary: 不依赖 lzc-cli 构建的最小静态 LPK。
+  - id: attic
+    source:
+      git: https://github.com/zerokaze420/lazy-attic.git
+      rev: 402385eb48c8af545dda8099c65f8d3ef19eaf38
+    summary: 带轻量 Web 控制台的 Nix 二进制缓存服务器。
     categories:
-      - demo
+      - developer
+      - cache
+      - nix
+    build:
+      type: command
+      command:
+        - nix
+        - build
+        - .#lpk
+      artifact: result/*.lpk
 ```
 
 每个应用的 `package.yml` 提供静态元数据，例如 package id、版本、名称、
-描述、作者、许可证、主页和最低系统版本。`manifest.yml` 提供 LazyCat
-运行路由。
+描述、作者、许可证、主页和最低系统版本。对于远程 Git source，这些文件来自
+被拉取的应用仓库。
 
 ## 本地开发
 
@@ -96,53 +94,74 @@ bun run dev
 
 ## 添加应用
 
-创建新的应用目录：
+默认使用方案 B：**远程 Git source + 固定 commit rev + PR 合并后自动构建**。
+这样本仓库不用 vendor 一整份源码，也不用 Git submodule，构建输入仍然可追踪。
+
+### 1. 准备应用仓库
+
+应用仓库需要能独立生成完整 `.lpk`。推荐提供：
 
 ```text
-apps/my-app/
-├── manifest.yml
+my-app/
 ├── package.yml
-└── content/web/index.html
+├── lzc-manifest.yml
+├── lzc-build.yml
+├── flake.nix
+└── ...
 ```
 
-把它加入 `apps.yml`：
+例如应用仓库中可以用 Nix 构建：
+
+```bash
+nix build .#lpk
+```
+
+构建成功后应能在 `result/*.lpk` 找到唯一一个 LPK 文件。
+
+### 2. 固定源码 commit
+
+不要直接引用浮动分支作为发布输入。先取得应用仓库当前 commit：
+
+```bash
+git ls-remote --heads https://github.com/<owner>/<app-repo>.git main
+```
+
+输出第一列就是 `rev`。例如：
+
+```text
+402385eb48c8af545dda8099c65f8d3ef19eaf38 refs/heads/main
+```
+
+### 3. Fork 并创建分支
+
+在 GitHub 页面点击 Fork，然后克隆自己的 fork：
+
+```bash
+git clone git@github.com:<your-name>/lur.git
+cd lur
+git switch -c add-my-app
+```
+
+进入 Nix 开发环境并安装依赖：
+
+```bash
+nix develop
+bun install
+```
+
+### 4. 修改 apps.yml
+
+在 `apps.yml` 的 `apps:` 下添加应用：
 
 ```yml
 apps:
   - id: my-app
-    source: apps/my-app
+    source:
+      git: https://github.com/<owner>/<app-repo>.git
+      rev: <固定 commit sha>
     summary: 我的 LazyCat 应用。
     categories:
       - utility
-```
-
-对于纯静态前端，把 `/` 路由到打包后的内容目录：
-
-```yml
-application:
-  subdomain: my-app
-  routes:
-    - /=file:///lzcapp/pkg/content/web
-```
-
-每次需要生成新的 release tag 和历史下载项时，递增
-`apps/my-app/package.yml` 里的 `version`。
-
-### 添加命令构建的 LPK
-
-如果应用本身已经能生成完整 `.lpk`，例如包含镜像、`lzc-build.yml` 或 Nix
-构建产物，不要使用默认的 content-only 打包。把源码放到 `apps/<app-id>/`
-后，在 `apps.yml` 中配置命令构建：
-
-```yml
-apps:
-  - id: attic
-    source: apps/attic
-    summary: 带轻量 Web 控制台的 Nix 二进制缓存服务器。
-    categories:
-      - developer
-      - cache
-      - nix
     build:
       type: command
       command:
@@ -152,10 +171,109 @@ apps:
       artifact: result/*.lpk
 ```
 
-`command` 推荐使用字符串数组，避免 shell 转义差异；也可以写成字符串。构建命令
-会在应用源码目录内执行。`artifact` 必须匹配唯一一个 `.lpk`，脚本会把它复制到
-`build/lpk/<app-id>-<version>.lpk`，再计算大小、SHA256 并写入
-`dist/repository.json`。
+字段说明：
+
+- `id`：仓库内应用 ID，也会用于 release tag 和文件名。
+- `source.git`：应用源码仓库。
+- `source.rev`：固定 commit，推荐必填，保证构建可复现。
+- `summary`：仓库页面上的短说明。
+- `categories`：搜索和分类标签。
+- `build.command`：在应用源码目录内执行的构建命令。
+- `build.artifact`：构建完成后匹配 `.lpk` 的路径，必须匹配唯一文件。
+
+### 5. 本地验证
+
+先验证前端：
+
+```bash
+bun run build
+```
+
+再验证 LPK 和仓库索引：
+
+```bash
+bun run build:lpk
+```
+
+`bun run build:lpk` 会生成：
+
+- `build/lpk/*.lpk`
+- `dist/repository.json`
+- `dist/apps.yml`
+
+如果应用构建依赖远程 Nix builder、Docker registry 或外部缓存，本地网络和
+builder DNS 也必须可用。
+
+### 6. 提交并发起 PR
+
+```bash
+git add apps.yml
+git commit -m "Add my-app"
+git push origin add-my-app
+```
+
+在 GitHub 上从 fork 的 `add-my-app` 分支向本仓库 `main` 发起 Pull Request。
+PR 描述建议包含：
+
+- 应用仓库链接。
+- 固定的 `rev`。
+- 本地执行 `bun run build` 和 `bun run build:lpk` 的结果。
+- 应用用途、权限和持久化目录说明。
+
+### 7. 自动构建和发布
+
+PR 合并后，`.github/workflows/pages-and-release.yml` 会在 `main` 上自动运行：
+
+1. 安装 Bun 和 Nix。
+2. 执行 `bun install --frozen-lockfile`。
+3. 执行 `bun run build` 构建 GitHub Pages 前端。
+4. 执行 `bun run build:lpk` 拉取远程源码、构建 LPK、生成 `repository.json`。
+5. 上传 `build/lpk/*.lpk` 为 GitHub Actions artifact。
+6. 按应用矩阵创建或更新 GitHub Release，并上传 `.lpk`。
+7. 部署 `dist/` 到 GitHub Pages。
+
+Release tag 和文件名由 `apps.yml` 的 `id` 与应用 `package.yml` 的 `version`
+决定：
+
+```text
+tag: <app-id>-v<version>
+file: <app-id>-<version>.lpk
+```
+
+每次需要生成新的 release tag 和历史下载项时，递增应用仓库 `package.yml` 里的
+`version`，更新 `apps.yml` 的 `source.rev`，再提交新的 PR。
+
+### 本地 content-only 应用
+
+纯静态示例或极小应用也可以继续放在本仓库 `apps/<app-id>/` 下，由脚本手工打包。
+目录结构：
+
+```text
+apps/my-static-app/
+├── manifest.yml
+├── package.yml
+└── content/web/index.html
+```
+
+配置：
+
+```yml
+apps:
+  - id: my-static-app
+    source: apps/my-static-app
+    summary: 我的静态 LazyCat 应用。
+    categories:
+      - static
+```
+
+对于纯静态前端，把 `/` 路由到打包后的内容目录：
+
+```yml
+application:
+  subdomain: my-static-app
+  routes:
+    - /=file:///lzcapp/pkg/content/web
+```
 
 ## 说明
 

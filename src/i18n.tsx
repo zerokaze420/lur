@@ -15,6 +15,13 @@ const messages: Record<Locale, Messages> = {
   "zh-CN": {
     appCount: "应用数",
     apps: "应用",
+    buildScriptDescription:
+      "这里说明 scripts/lazycat-repository.mjs 如何读取 apps.yml、拉取源码、构建 LPK，并生成给 GitHub Pages 使用的仓库索引。",
+    buildScriptExample: "远程 Git 应用示例",
+    buildScriptEyebrow: "构建流程",
+    buildScriptFiles: "相关文件",
+    buildScriptNav: "构建脚本",
+    buildScriptTitle: "构建脚本如何把应用变成可发布的 LPK。",
     builtFromYaml: "基于 YAML 和 GitHub Actions 发布 LazyCat 第三方应用。",
     catalogDescription:
       "修改 apps.yml 添加应用。工作流会手工生成 LPK 归档、发布 release 产物，并更新这个静态目录。",
@@ -40,6 +47,13 @@ const messages: Record<Locale, Messages> = {
   "en-US": {
     appCount: "Apps",
     apps: "Apps",
+    buildScriptDescription:
+      "This page explains how scripts/lazycat-repository.mjs reads apps.yml, checks out sources, builds LPKs, and writes the repository index used by GitHub Pages.",
+    buildScriptExample: "Remote Git App Example",
+    buildScriptEyebrow: "Build Flow",
+    buildScriptFiles: "Files",
+    buildScriptNav: "Build Script",
+    buildScriptTitle: "How the build script turns apps into publishable LPKs.",
     builtFromYaml:
       "Publish LazyCat third-party app releases with YAML and GitHub Actions.",
     catalogDescription:

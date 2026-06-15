@@ -25,7 +25,14 @@ type RepositoryApp = {
   author: string;
   locales?: Record<string, { name?: string; description?: string }>;
   release: ReleaseInfo;
-  source: string;
+  source:
+    | string
+    | {
+        type: "git";
+        url: string;
+        rev?: string;
+        ref?: string;
+      };
 };
 
 type RepositoryIndex = {
@@ -108,6 +115,18 @@ function formatBytes(bytes: number, pendingLabel: string) {
 
 function shortSha(value: string) {
   return value.length > 18 ? `${value.slice(0, 18)}...` : value;
+}
+
+function sourceHref(app: RepositoryApp, repositorySource: string) {
+  if (app.homepage) {
+    return app.homepage;
+  }
+
+  if (typeof app.source === "object" && app.source.type === "git") {
+    return app.source.url;
+  }
+
+  return repositorySource;
 }
 
 export default function IndexPage() {
@@ -290,7 +309,7 @@ export default function IndexPage() {
                 </a>
                 <a
                   className="inline-flex h-11 items-center justify-center border border-[#b9c7d9] px-5 text-sm font-semibold text-[#284158] transition hover:border-[#0b5cad] hover:text-[#0b5cad]"
-                  href={app.homepage || index.repository.source}
+                  href={sourceHref(app, index.repository.source)}
                   rel="noopener noreferrer"
                   target="_blank"
                 >

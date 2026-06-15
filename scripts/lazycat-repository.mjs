@@ -20,6 +20,7 @@ const root = process.cwd();
 const distDir = path.join(root, "dist");
 const lpkDir = path.join(root, "build", "lpk");
 const workDir = path.join(root, "build", "manual-lpk");
+const sourceDir = path.join(root, "build", "sources");
 
 function formatCommand(command, args = []) {
   return [command, ...args].join(" ");
@@ -34,8 +35,11 @@ function run(command, args = [], options = {}) {
   });
 
   if (result.status !== 0) {
+    const stdout = typeof result.stdout === "string" ? result.stdout : "";
+    const stderr = typeof result.stderr === "string" ? result.stderr : "";
+
     throw new Error(
-      `${formatCommand(command, args)} failed in ${options.cwd ?? root}\n${result.stdout}\n${result.stderr}`,
+      `${formatCommand(command, args)} failed in ${options.cwd ?? root}\n${stdout}\n${stderr}`,
     );
   }
 
@@ -52,8 +56,11 @@ function runShell(command, options = {}) {
   });
 
   if (result.status !== 0) {
+    const stdout = typeof result.stdout === "string" ? result.stdout : "";
+    const stderr = typeof result.stderr === "string" ? result.stderr : "";
+
     throw new Error(
-      `${command} failed in ${options.cwd ?? root}\n${result.stdout}\n${result.stderr}`,
+      `${command} failed in ${options.cwd ?? root}\n${stdout}\n${stderr}`,
     );
   }
 
@@ -118,12 +125,32 @@ function requiredString(value, label) {
   return value.trim();
 }
 
+function validateAppId(id) {
+  if (!/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(id)) {
+    throw new Error(
+      `apps[].id must use lowercase letters, numbers, dots or dashes: ${id}`,
+    );
+  }
+}
+
 function insideRoot(file, label) {
   const resolved = path.resolve(root, file);
   const relative = path.relative(root, resolved);
 
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`${label} must stay inside repository root: ${file}`);
+  }
+
+  return resolved;
+}
+
+function insideDirectory(base, file, label) {
+  const resolvedBase = path.resolve(base);
+  const resolved = path.resolve(base, file);
+  const relative = path.relative(resolvedBase, resolved);
+
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`${label} must stay inside ${resolvedBase}: ${file}`);
   }
 
   return resolved;
@@ -192,6 +219,80 @@ function normalizeBuild(app, id) {
     ...app.build,
     type: app.build.type ?? "content",
   };
+}
+
+function normalizeSource(source, id) {
+  if (typeof source === "string") {
+    return {
+      type: "local",
+      path: requiredString(source, `${id}.source`),
+    };
+  }
+
+  if (typeof source !== "object" || source == null || Array.isArray(source)) {
+    throw new Error(`${id}.source must be a string path or object`);
+  }
+
+  const git = requiredString(source.git, `${id}.source.git`);
+  const rev = typeof source.rev === "string" ? source.rev.trim() : "";
+  const ref = typeof source.ref === "string" ? source.ref.trim() : "";
+
+  if (!rev && !ref) {
+    throw new Error(`${id}.source must set rev or ref for git sources`);
+  }
+
+  return {
+    type: "git",
+    git,
+    rev,
+    ref,
+  };
+}
+
+function repositorySource(source) {
+  if (source.type === "local") {
+    return source.path;
+  }
+
+  return {
+    type: "git",
+    url: source.git,
+    ...(source.rev ? { rev: source.rev } : {}),
+    ...(source.ref ? { ref: source.ref } : {}),
+  };
+}
+
+async function prepareSource(id, source) {
+  if (source.type === "local") {
+    const localSource = insideRoot(source.path, `${id}.source`);
+    await ensureDirectory(localSource, `${id}.source`);
+    return localSource;
+  }
+
+  const checkoutDir = insideDirectory(sourceDir, id, `${id}.source checkout`);
+
+  await rm(checkoutDir, { force: true, recursive: true });
+  await mkdir(sourceDir, { recursive: true });
+
+  if (source.ref) {
+    run("git", [
+      "clone",
+      "--depth",
+      "1",
+      "--branch",
+      source.ref,
+      source.git,
+      checkoutDir,
+    ]);
+  } else {
+    run("git", ["clone", "--no-checkout", source.git, checkoutDir]);
+  }
+
+  if (source.rev) {
+    run("git", ["checkout", "--detach", source.rev], { cwd: checkoutDir });
+  }
+
+  return checkoutDir;
 }
 
 async function findOneArtifact(source, pattern, label) {
@@ -308,6 +409,7 @@ async function buildLpks() {
 
   await rm(lpkDir, { force: true, recursive: true });
   await rm(workDir, { force: true, recursive: true });
+  await rm(sourceDir, { force: true, recursive: true });
   await mkdir(lpkDir, { recursive: true });
   await mkdir(distDir, { recursive: true });
 
@@ -319,6 +421,7 @@ async function buildLpks() {
     }
 
     const id = requiredString(app.id, "apps[].id");
+    validateAppId(id);
 
     if (seenIds.has(id)) {
       throw new Error(`duplicate app id: ${id}`);
@@ -326,8 +429,8 @@ async function buildLpks() {
 
     seenIds.add(id);
 
-    const source = insideRoot(requiredString(app.source, `${id}.source`), `${id}.source`);
-    await ensureDirectory(source, `${id}.source`);
+    const sourceConfig = normalizeSource(app.source, id);
+    const source = await prepareSource(id, sourceConfig);
 
     const packageFile = path.join(source, "package.yml");
     await ensureFile(packageFile, `${id}.package.yml`);
@@ -384,7 +487,7 @@ async function buildLpks() {
         sha256,
         download_url: githubReleaseUrl(repo, tag, fileName),
       },
-      source: app.source,
+      source: repositorySource(sourceConfig),
       build: {
         type: build.type,
       },

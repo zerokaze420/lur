@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 
 import IndexPage from "@/pages/index";
+import BuildScriptPage from "@/pages/build-script";
 import DocsPage from "@/pages/docs";
 import PricingPage from "@/pages/pricing";
 import BlogPage from "@/pages/blog";
@@ -12,6 +13,7 @@ function App() {
     <I18nProvider>
       <Routes>
         <Route element={<IndexPage />} path="/" />
+        <Route element={<BuildScriptPage />} path="/build-script" />
         <Route element={<DocsPage />} path="/docs" />
         <Route element={<PricingPage />} path="/pricing" />
         <Route element={<BlogPage />} path="/blog" />
