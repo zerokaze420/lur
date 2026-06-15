@@ -1,0 +1,15 @@
+package: cloud.lazycat.app.hello-lazycat
+version: 0.1.0
+name: Hello LazyCat
+description: 不依赖 lzc-cli，由 GitHub Actions 手工打包的最小静态 LazyCat 应用。
+author: LazyCat Repository Maintainers
+license: MIT
+homepage: https://github.com/your-github-name/lur
+min_os_version: 1.5.0
+locales:
+  zh-CN:
+    name: Hello LazyCat
+    description: 不依赖 lzc-cli 的最小静态 LPK 示例。
+  en-US:
+    name: Hello LazyCat
+    description: Minimal static LPK example built without lzc-cli.

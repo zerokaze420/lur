@@ -1,0 +1,90 @@
+name: Build LPKs and publish Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-and-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.collect.outputs.apps }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build frontend
+        run: bun run build
+
+      - name: Build LPKs and repository index
+        run: bun run build:lpk
+
+      - name: Collect release metadata
+        id: collect
+        run: |
+          node -e "const fs=require('fs'); const repo=JSON.parse(fs.readFileSync('dist/repository.json','utf8')); fs.appendFileSync(process.env.GITHUB_OUTPUT, 'apps='+JSON.stringify(repo.apps)+'\n')"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Upload LPK build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lpk-packages
+          path: build/lpk/*.lpk
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: ${{ fromJson(needs.build.outputs.apps) }}
+    steps:
+      - name: Download LPK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lpk-packages
+          path: build/lpk
+
+      - name: Publish release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ matrix.app.release.tag }}
+          name: ${{ matrix.app.name }} ${{ matrix.app.version }}
+          body: |
+            Package: `${{ matrix.app.package }}`
+            Version: `${{ matrix.app.version }}`
+            SHA256: `${{ matrix.app.release.sha256 }}`
+          files: build/lpk/${{ matrix.app.release.file }}
+
+  deploy-pages:
+    needs:
+      - build
+      - release
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

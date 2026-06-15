@@ -1,0 +1,13 @@
+repository:
+  name: LazyCat 第三方仓库
+  description: 基于 GitHub Pages 的 LazyCat 应用仓库。
+  homepage: https://example.github.io/lur/
+  owner: your-github-name
+  repo: lur
+apps:
+  - id: hello-lazycat
+    source: apps/hello-lazycat
+    summary: 不依赖 lzc-cli 构建的最小静态 LPK。
+    categories:
+      - demo
+      - static

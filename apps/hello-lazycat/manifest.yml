@@ -1,0 +1,6 @@
+application:
+  subdomain: hello-lazycat
+  routes:
+    - /=file:///lzcapp/pkg/content/web
+  public_path:
+    - /
