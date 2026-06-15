@@ -128,11 +128,40 @@ application:
 每次需要生成新的 release tag 和历史下载项时，递增
 `apps/my-app/package.yml` 里的 `version`。
 
+### 添加命令构建的 LPK
+
+如果应用本身已经能生成完整 `.lpk`，例如包含镜像、`lzc-build.yml` 或 Nix
+构建产物，不要使用默认的 content-only 打包。把源码放到 `apps/<app-id>/`
+后，在 `apps.yml` 中配置命令构建：
+
+```yml
+apps:
+  - id: attic
+    source: apps/attic
+    summary: 带轻量 Web 控制台的 Nix 二进制缓存服务器。
+    categories:
+      - developer
+      - cache
+      - nix
+    build:
+      type: command
+      command:
+        - nix
+        - build
+        - .#lpk
+      artifact: result/*.lpk
+```
+
+`command` 推荐使用字符串数组，避免 shell 转义差异；也可以写成字符串。构建命令
+会在应用源码目录内执行。`artifact` 必须匹配唯一一个 `.lpk`，脚本会把它复制到
+`build/lpk/<app-id>-<version>.lpk`，再计算大小、SHA256 并写入
+`dist/repository.json`。
+
 ## 说明
 
 - 当前手工构建器支持 content-only LPK。
-- 如需支持带镜像的 LPK，可以继续扩展 `scripts/lazycat-repository.mjs`，
-  让它生成 `images/` 和 `images.lock`。
+- 带镜像或自定义构建流程的 LPK 可以使用 `build.type: command`，交给应用自己的
+  Nix 或 lzc-cli 构建流程生成完整 `.lpk`。
 - Release asset URL 是确定的：
   `https://github.com/<owner>/<repo>/releases/download/<app-id>-v<version>/<app-id>-<version>.lpk`.
 
