@@ -183,6 +183,12 @@ apps:
 - `build.command`：在应用源码目录内执行的构建命令。
 - `build.artifact`：构建完成后匹配 `.lpk` 的路径，必须匹配唯一文件。
 
+`build.type: lzc` 的应用需要在应用仓库里直接维护可构建的
+`lzc-build.yml` 和 manifest。manifest 中的 `services.*.image` 必须使用 GitHub
+Actions 可匿名拉取的公开镜像，并固定到明确版本标签或 digest；不要引用个人账号下的
+私有 registry 镜像，也不要依赖本仓库在打包时替换镜像。需要更新镜像时，先在应用仓库
+提交 manifest 变更，再把本仓库 `apps.yml` 的 `source.rev` 更新到新的提交。
+
 ### 5. 本地验证
 
 先验证前端：

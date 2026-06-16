@@ -682,6 +682,7 @@ async function embedDockerImage({
   run("skopeo", [
     "--insecure-policy",
     "copy",
+    "--src-no-creds",
     "--dest-compress=false",
     dockerImageReference(image),
     `docker-archive:${archive}`,

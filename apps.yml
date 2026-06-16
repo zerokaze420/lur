@@ -30,7 +30,7 @@ apps:
   - id: romm
     source:
       git: https://github.com/zerokaze420/romm.git
-      rev: 010edb8af834e1fcfd0ff7da359ae693a3bf4b4f
+      rev: e0f15bd4849385c0779abb6e437c3e1500c210b1
     summary: 自托管 ROM 管理器和浏览器游戏播放器。
     categories:
       - game
