@@ -39,6 +39,14 @@ jobs:
       - name: Build frontend
         run: bun run build
 
+      - name: Restore LPK cache
+        uses: actions/cache@v4
+        with:
+          path: build/cache
+          key: lpk-cache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            lpk-cache-${{ runner.os }}-
+
       - name: Build LPKs and repository index
         run: bun run build:lpk
 

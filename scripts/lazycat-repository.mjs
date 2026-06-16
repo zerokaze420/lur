@@ -7,6 +7,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  readlink,
   rm,
   stat,
   writeFile,
@@ -21,6 +22,10 @@ const distDir = path.join(root, "dist");
 const lpkDir = path.join(root, "build", "lpk");
 const workDir = path.join(root, "build", "manual-lpk");
 const sourceDir = path.join(root, "build", "sources");
+const cacheDir = path.join(root, "build", "cache");
+const cacheLpkDir = path.join(cacheDir, "lpk");
+const cacheLockFile = path.join(cacheDir, "lpk-cache.lock.json");
+const cacheSchema = 1;
 
 function formatCommand(command, args = []) {
   return [command, ...args].join(" ");
@@ -94,9 +99,40 @@ async function readYaml(file) {
   return YAML.parse(text);
 }
 
+async function readJsonIfExists(file, fallback) {
+  try {
+    return JSON.parse(await readFile(file, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return fallback;
+    }
+
+    throw error;
+  }
+}
+
 async function sha256File(file) {
   const data = await readFile(file);
   return createHash("sha256").update(data).digest("hex");
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(",")}}`;
+  }
+
+  return JSON.stringify(value);
+}
+
+function sha256Text(text) {
+  return createHash("sha256").update(text).digest("hex");
 }
 
 function githubReleaseUrl(repo, tag, fileName) {
@@ -188,6 +224,55 @@ async function ensureDirectory(dir, label) {
   }
 }
 
+function shouldIgnoreSourceEntry(relativePath) {
+  const parts = relativePath.split(path.sep);
+
+  return (
+    parts.includes(".git") ||
+    parts.includes("result") ||
+    parts.includes("node_modules") ||
+    parts.includes(".direnv")
+  );
+}
+
+async function sourceDigest(source) {
+  const entries = [];
+
+  async function walk(dir) {
+    const dirEntries = await readdir(dir, { withFileTypes: true });
+
+    for (const entry of dirEntries) {
+      const file = path.join(dir, entry.name);
+      const relative = path.relative(source, file);
+
+      if (shouldIgnoreSourceEntry(relative)) {
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        await walk(file);
+      } else if (entry.isSymbolicLink()) {
+        entries.push({
+          path: relative,
+          type: "symlink",
+          target: await readlink(file),
+        });
+      } else if (entry.isFile()) {
+        entries.push({
+          path: relative,
+          type: "file",
+          sha256: await sha256File(file),
+        });
+      }
+    }
+  }
+
+  await walk(source);
+  entries.sort((left, right) => left.path.localeCompare(right.path));
+
+  return sha256Text(stableStringify(entries));
+}
+
 async function removeSymlink(file) {
   try {
     const info = await lstat(file);
@@ -200,6 +285,10 @@ async function removeSymlink(file) {
       throw error;
     }
   }
+}
+
+function cacheFileName(inputHash, fileName) {
+  return `${inputHash}-${fileName}`;
 }
 
 function normalizeBuild(app, id) {
@@ -293,6 +382,85 @@ async function prepareSource(id, source) {
   }
 
   return checkoutDir;
+}
+
+function appInputHash({ id, sourceConfig, build, packageId, version, sourceHash }) {
+  return sha256Text(
+    stableStringify({
+      schema: cacheSchema,
+      id,
+      package: packageId,
+      version,
+      source: repositorySource(sourceConfig),
+      sourceHash,
+      build,
+    }),
+  );
+}
+
+async function copyCachedLpk({ id, cacheLock, inputHash, fileName, lpkFile }) {
+  const cached = cacheLock.apps?.[id];
+
+  if (
+    cached?.schema !== cacheSchema ||
+    cached.inputHash !== inputHash ||
+    cached.file !== fileName
+  ) {
+    return false;
+  }
+
+  const cachedFile = path.join(cacheLpkDir, cached.cacheFile);
+
+  try {
+    const info = await stat(cachedFile);
+
+    if (!info.isFile()) {
+      return false;
+    }
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
+
+  await copyFile(cachedFile, lpkFile);
+
+  const size = Number(run("wc", ["-c", lpkFile]).split(/\s+/)[0]);
+  const sha256 = await sha256File(lpkFile);
+
+  if (size !== cached.size || sha256 !== cached.sha256) {
+    return false;
+  }
+
+  console.log(`cache hit: ${id}`);
+  return true;
+}
+
+async function updateCachedLpk({
+  id,
+  cacheLock,
+  inputHash,
+  fileName,
+  lpkFile,
+  size,
+  sha256,
+}) {
+  await mkdir(cacheLpkDir, { recursive: true });
+
+  const cacheFile = cacheFileName(inputHash, fileName);
+  await copyFile(lpkFile, path.join(cacheLpkDir, cacheFile));
+
+  cacheLock.apps ??= {};
+  cacheLock.apps[id] = {
+    schema: cacheSchema,
+    inputHash,
+    file: fileName,
+    cacheFile,
+    size,
+    sha256,
+  };
 }
 
 async function findOneArtifact(source, pattern, label) {
@@ -406,11 +574,16 @@ async function buildLpks() {
   const apps = Array.isArray(config.apps) ? config.apps : [];
   const builtAt = new Date().toISOString();
   const seenIds = new Set();
+  const cacheLock = await readJsonIfExists(cacheLockFile, {
+    schema: cacheSchema,
+    apps: {},
+  });
 
   await rm(lpkDir, { force: true, recursive: true });
   await rm(workDir, { force: true, recursive: true });
   await rm(sourceDir, { force: true, recursive: true });
   await mkdir(lpkDir, { recursive: true });
+  await mkdir(cacheDir, { recursive: true });
   await mkdir(distDir, { recursive: true });
 
   const entries = [];
@@ -447,25 +620,58 @@ async function buildLpks() {
     const fileName = `${id}-${version}.lpk`;
     const appWorkDir = path.join(workDir, id);
     const lpkFile = path.join(lpkDir, fileName);
+    const sourceHash = await sourceDigest(source);
+    const inputHash = appInputHash({
+      id,
+      sourceConfig,
+      build,
+      packageId,
+      version,
+      sourceHash,
+    });
 
-    if (build.type === "content") {
-      await buildContentLpk({
-        id,
-        source,
-        packageFile,
-        manifestFile,
-        contentDir: path.join(source, contentName),
-        appWorkDir,
-        lpkFile,
-      });
-    } else if (build.type === "command") {
-      await buildCommandLpk({ id, source, build, lpkFile });
-    } else {
-      throw new Error(`${id}.build.type must be "content" or "command"`);
+    const cached = await copyCachedLpk({
+      id,
+      cacheLock,
+      inputHash,
+      fileName,
+      lpkFile,
+    });
+
+    if (!cached) {
+      console.log(`cache miss: ${id}`);
+
+      if (build.type === "content") {
+        await buildContentLpk({
+          id,
+          source,
+          packageFile,
+          manifestFile,
+          contentDir: path.join(source, contentName),
+          appWorkDir,
+          lpkFile,
+        });
+      } else if (build.type === "command") {
+        await buildCommandLpk({ id, source, build, lpkFile });
+      } else {
+        throw new Error(`${id}.build.type must be "content" or "command"`);
+      }
     }
 
     const size = Number(run("wc", ["-c", lpkFile]).split(/\s+/)[0]);
     const sha256 = await sha256File(lpkFile);
+
+    if (!cached) {
+      await updateCachedLpk({
+        id,
+        cacheLock,
+        inputHash,
+        fileName,
+        lpkFile,
+        size,
+        sha256,
+      });
+    }
 
     entries.push({
       id,
@@ -513,6 +719,17 @@ async function buildLpks() {
     `${JSON.stringify(repositoryJson, null, 2)}\n`,
   );
   await writeFile(path.join(distDir, "apps.yml"), await readFile("apps.yml"));
+  await writeFile(
+    cacheLockFile,
+    `${JSON.stringify(
+      {
+        schema: cacheSchema,
+        apps: cacheLock.apps ?? {},
+      },
+      null,
+      2,
+    )}\n`,
+  );
   console.log(`built ${entries.length} LPK(s)`);
 }
 
