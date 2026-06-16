@@ -224,6 +224,35 @@ async function ensureDirectory(dir, label) {
   }
 }
 
+async function fileExists(file) {
+  try {
+    const info = await stat(file);
+    return info.isFile();
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+function optionalString(value, label) {
+  if (value == null) {
+    return "";
+  }
+
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a string`);
+  }
+
+  return value.trim();
+}
+
+function resolveSourcePath(source, file, label) {
+  return insideDirectory(source, requiredString(file, label), label);
+}
+
 function shouldIgnoreSourceEntry(relativePath) {
   const parts = relativePath.split(path.sep);
 
@@ -525,6 +554,99 @@ async function buildContentLpk({
   return source;
 }
 
+async function copyIfExists(sourceFile, targetFile) {
+  if (await fileExists(sourceFile)) {
+    await copyFile(sourceFile, targetFile);
+    return true;
+  }
+
+  return false;
+}
+
+function unsupportedLzcBuildKeys(config) {
+  return [
+    "buildscript",
+    "images",
+    "compose_override",
+    "resource_exports",
+  ].filter((key) => config[key] != null);
+}
+
+async function buildLzcConfigLpk({
+  id,
+  source,
+  packageFile,
+  appWorkDir,
+  lpkFile,
+}) {
+  const buildFile = path.join(source, "lzc-build.yml");
+  await ensureFile(buildFile, `${id}.lzc-build.yml`);
+
+  const config = await readYaml(buildFile);
+  if (typeof config !== "object" || config == null || Array.isArray(config)) {
+    throw new Error(`${id}.lzc-build.yml must be an object`);
+  }
+
+  const unsupported = unsupportedLzcBuildKeys(config);
+  if (unsupported.length > 0) {
+    throw new Error(
+      `${id}.lzc-build.yml uses unsupported manual build keys: ${unsupported.join(", ")}`,
+    );
+  }
+
+  if (config.package_override != null) {
+    throw new Error(`${id}.lzc-build.yml package_override is not supported`);
+  }
+
+  const manifestName = config.manifest ?? "lzc-manifest.yml";
+  const manifestFile = resolveSourcePath(
+    source,
+    manifestName,
+    `${id}.lzc-build.yml manifest`,
+  );
+  await ensureFile(manifestFile, `${id}.manifest`);
+
+  await rm(appWorkDir, { force: true, recursive: true });
+  await mkdir(appWorkDir, { recursive: true });
+  await copyFile(packageFile, path.join(appWorkDir, "package.yml"));
+  await copyFile(manifestFile, path.join(appWorkDir, "manifest.yml"));
+
+  const contentDirName = optionalString(
+    config.contentdir,
+    `${id}.lzc-build.yml contentdir`,
+  );
+  if (contentDirName) {
+    const contentDir = resolveSourcePath(
+      source,
+      contentDirName,
+      `${id}.lzc-build.yml contentdir`,
+    );
+    await ensureDirectory(contentDir, `${id}.contentdir`);
+    run("tar", ["-C", contentDir, "-cf", path.join(appWorkDir, "content.tar"), "."]);
+  }
+
+  const iconName = optionalString(config.icon, `${id}.lzc-build.yml icon`);
+  if (iconName) {
+    const iconFile = resolveSourcePath(
+      source,
+      iconName,
+      `${id}.lzc-build.yml icon`,
+    );
+    await ensureFile(iconFile, `${id}.icon`);
+    await copyFile(iconFile, path.join(appWorkDir, "icon.png"));
+  }
+
+  await copyIfExists(
+    path.join(source, "lzc-deploy-params.yml"),
+    path.join(appWorkDir, "deploy_params.yml"),
+  );
+
+  const entries = (await readdir(appWorkDir)).sort();
+  run("tar", ["-C", appWorkDir, "-cf", lpkFile, ...entries]);
+
+  return buildFile;
+}
+
 async function buildCommandLpk({ id, source, build, lpkFile }) {
   const command = normalizeCommand(build.command, `${id}.build.command`);
   const artifactPattern = build.artifact ?? "result/*.lpk";
@@ -653,8 +775,16 @@ async function buildLpks() {
         });
       } else if (build.type === "command") {
         await buildCommandLpk({ id, source, build, lpkFile });
+      } else if (build.type === "lzc") {
+        await buildLzcConfigLpk({
+          id,
+          source,
+          packageFile,
+          appWorkDir,
+          lpkFile,
+        });
       } else {
-        throw new Error(`${id}.build.type must be "content" or "command"`);
+        throw new Error(`${id}.build.type must be "content", "command" or "lzc"`);
       }
     }
 

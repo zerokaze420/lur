@@ -178,6 +178,8 @@ apps:
 - `source.rev`：固定 commit，推荐必填，保证构建可复现。
 - `summary`：仓库页面上的短说明。
 - `categories`：搜索和分类标签。
+- `build.type`：`content` 会打包静态内容；`command` 会执行应用自己的构建命令；
+  `lzc` 会读取应用仓库的 `lzc-build.yml` 并手工打包基础 LPK。
 - `build.command`：在应用源码目录内执行的构建命令。
 - `build.artifact`：构建完成后匹配 `.lpk` 的路径，必须匹配唯一文件。
 
@@ -277,9 +279,11 @@ application:
 
 ## 说明
 
-- 当前手工构建器支持 content-only LPK。
-- 带镜像或自定义构建流程的 LPK 可以使用 `build.type: command`，交给应用自己的
-  Nix 或 lzc-cli 构建流程生成完整 `.lpk`。
+- 当前手工构建器支持 content-only LPK，也支持 `build.type: lzc` 从
+  `lzc-build.yml` 打包 `manifest`、`package.yml`、`contentdir`、`icon` 和
+  `lzc-deploy-params.yml`。
+- 带 embedded images 或自定义构建流程的 LPK 可以使用 `build.type: command`，
+  交给应用自己的 Nix 构建流程生成完整 `.lpk`。
 - Release asset URL 是确定的：
   `https://github.com/<owner>/<repo>/releases/download/<app-id>-v<version>/<app-id>-<version>.lpk`.
 

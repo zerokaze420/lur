@@ -27,3 +27,14 @@ apps:
         - build
         - .#lpk
       artifact: result/*.lpk
+  - id: romm
+    source:
+      git: https://github.com/zerokaze420/romm.git
+      rev: 010edb8af834e1fcfd0ff7da359ae693a3bf4b4f
+    summary: 自托管 ROM 管理器和浏览器游戏播放器。
+    categories:
+      - game
+      - emulator
+      - media
+    build:
+      type: lzc
