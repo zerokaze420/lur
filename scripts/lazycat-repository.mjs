@@ -593,7 +593,27 @@ function dockerImageReference(image) {
   return `docker://${image}`;
 }
 
-function lzcServiceImages(manifest, id) {
+function logBuildDecision(id, type, action) {
+  console.log(`[build:${id}] type=${type} -> ${action}`);
+}
+
+function buildTypeAction(type) {
+  if (type === "content") {
+    return "pack manifest, package and content directory";
+  }
+
+  if (type === "command") {
+    return "run configured command and copy artifact";
+  }
+
+  if (type === "lzc") {
+    return "read lzc-build.yml and embed remote service images";
+  }
+
+  return "unsupported build type";
+}
+
+function lzcServiceImages(manifest, id, { log = false } = {}) {
   const services = manifest.services ?? {};
 
   if (typeof services !== "object" || services == null || Array.isArray(services)) {
@@ -607,16 +627,33 @@ function lzcServiceImages(manifest, id) {
         serviceConfig == null ||
         Array.isArray(serviceConfig) ||
         typeof serviceConfig.image !== "string" ||
-        serviceConfig.image.trim() === "" ||
-        serviceConfig.image.startsWith("embed:")
+        serviceConfig.image.trim() === ""
       ) {
         return null;
+      }
+
+      const image = serviceConfig.image.trim();
+
+      if (image.startsWith("embed:")) {
+        if (log) {
+          console.log(
+            `[build:${id}] service=${serviceName} image=${image} -> already embedded, skipping`,
+          );
+        }
+
+        return null;
+      }
+
+      if (log) {
+        console.log(
+          `[build:${id}] service=${serviceName} image=${image} -> embed with skopeo`,
+        );
       }
 
       return {
         serviceName,
         alias: imageAlias(serviceName),
-        image: serviceConfig.image.trim(),
+        image,
       };
     })
     .filter(Boolean)
@@ -819,7 +856,7 @@ async function buildLzcConfigLpk({
   );
   await ensureFile(manifestFile, `${id}.manifest`);
   const manifest = await readYaml(manifestFile);
-  const serviceImages = lzcServiceImages(manifest, id);
+  const serviceImages = lzcServiceImages(manifest, id, { log: true });
 
   await rm(appWorkDir, { force: true, recursive: true });
   await mkdir(appWorkDir, { recursive: true });
@@ -989,6 +1026,7 @@ async function buildLpks() {
       version,
       sourceHash,
     });
+    logBuildDecision(id, build.type, buildTypeAction(build.type));
 
     const cached = await copyCachedLpk({
       id,

@@ -33,6 +33,17 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
+      - name: Configure containers registries
+        run: |
+          mkdir -p "$RUNNER_TEMP/containers"
+          printf '%s\n' \
+            'unqualified-search-registries = ["docker.io"]' \
+            'short-name-mode = "permissive"' \
+            > "$RUNNER_TEMP/containers/registries.conf"
+          echo "CONTAINERS_REGISTRIES_CONF=$RUNNER_TEMP/containers/registries.conf" >> "$GITHUB_ENV"
+          echo "Using containers registries config:"
+          cat "$RUNNER_TEMP/containers/registries.conf"
+
       - name: Install dependencies
         run: nix develop -c bun install --frozen-lockfile
 
