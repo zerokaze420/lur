@@ -14,6 +14,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 import YAML from "yaml";
 
@@ -25,7 +26,8 @@ const sourceDir = path.join(root, "build", "sources");
 const cacheDir = path.join(root, "build", "cache");
 const cacheLpkDir = path.join(cacheDir, "lpk");
 const cacheLockFile = path.join(cacheDir, "lpk-cache.lock.json");
-const cacheSchema = 1;
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const cacheSchema = 2;
 
 function formatCommand(command, args = []) {
   return [command, ...args].join(" ");
@@ -479,7 +481,9 @@ async function updateCachedLpk({
   await mkdir(cacheLpkDir, { recursive: true });
 
   const cacheFile = cacheFileName(inputHash, fileName);
-  await copyFile(lpkFile, path.join(cacheLpkDir, cacheFile));
+  const cachePath = path.join(cacheLpkDir, cacheFile);
+  await rm(cachePath, { force: true });
+  await copyFile(lpkFile, cachePath);
 
   cacheLock.apps ??= {};
   cacheLock.apps[id] = {
@@ -563,6 +567,11 @@ async function copyIfExists(sourceFile, targetFile) {
   return false;
 }
 
+async function tarDirectoryContents(base, output) {
+  const entries = (await readdir(base)).sort();
+  run("tar", ["-C", base, "-cf", output, ...entries]);
+}
+
 function unsupportedLzcBuildKeys(config) {
   return [
     "buildscript",
@@ -570,6 +579,210 @@ function unsupportedLzcBuildKeys(config) {
     "compose_override",
     "resource_exports",
   ].filter((key) => config[key] != null);
+}
+
+function imageAlias(serviceName) {
+  return serviceName.replace(/[^a-zA-Z0-9_.-]/g, "-");
+}
+
+function dockerImageReference(image) {
+  if (image.includes("://")) {
+    return image;
+  }
+
+  return `docker://${image}`;
+}
+
+function lzcServiceImages(manifest, id) {
+  const services = manifest.services ?? {};
+
+  if (typeof services !== "object" || services == null || Array.isArray(services)) {
+    return [];
+  }
+
+  return Object.entries(services)
+    .map(([serviceName, serviceConfig]) => {
+      if (
+        typeof serviceConfig !== "object" ||
+        serviceConfig == null ||
+        Array.isArray(serviceConfig) ||
+        typeof serviceConfig.image !== "string" ||
+        serviceConfig.image.trim() === "" ||
+        serviceConfig.image.startsWith("embed:")
+      ) {
+        return null;
+      }
+
+      return {
+        serviceName,
+        alias: imageAlias(serviceName),
+        image: serviceConfig.image.trim(),
+      };
+    })
+    .filter(Boolean)
+    .map((entry) => {
+      if (!/^[a-zA-Z0-9_.-]+$/.test(entry.alias)) {
+        throw new Error(`${id}.services.${entry.serviceName}.image alias is invalid`);
+      }
+
+      return entry;
+    });
+}
+
+async function embedDockerImage({
+  id,
+  serviceName,
+  image,
+  alias,
+  appWorkDir,
+  imageWorkDir,
+}) {
+  await mkdir(imageWorkDir, { recursive: true });
+  const archive = path.join(imageWorkDir, `${alias}.docker-archive.tar`);
+  const imagesDir = path.join(appWorkDir, "images");
+
+  console.log(`embedding image for ${id}: ${alias} <- ${image}`);
+  run("skopeo", [
+    "--insecure-policy",
+    "copy",
+    "--dest-compress=false",
+    dockerImageReference(image),
+    `docker-archive:${archive}`,
+  ], {
+    stdio: "inherit",
+  });
+
+  const output = run("python3", [
+    path.join(scriptDir, "docker-archive-to-oci.py"),
+    "--docker-archive",
+    archive,
+    "--images-dir",
+    imagesDir,
+    "--ref-name",
+    alias,
+  ]);
+
+  return {
+    ...JSON.parse(output),
+    serviceName,
+  };
+}
+
+async function writeImagesLock(appWorkDir, embeddedImages) {
+  if (embeddedImages.length === 0) {
+    return;
+  }
+
+  const lines = ["version: 1", "images:"];
+
+  for (const image of embeddedImages) {
+    lines.push(`  ${image.alias}:`);
+    lines.push(`    image_id: ${image.image_id}`);
+    lines.push("    upstream: ''");
+    lines.push("    layers:");
+
+    for (const digest of image.layers) {
+      lines.push(`      - digest: ${digest}`);
+      lines.push("        source: embed");
+    }
+  }
+
+  await writeFile(path.join(appWorkDir, "images.lock"), `${lines.join("\n")}\n`);
+}
+
+function rewriteManifestImages(manifest, images) {
+  const next = structuredClone(manifest);
+
+  for (const image of images) {
+    next.services[image.serviceName].image = `embed:${image.alias}@${image.image_id}`;
+  }
+
+  return next;
+}
+
+async function verifyEmbeddedImages(appWorkDir) {
+  const manifestFile = path.join(appWorkDir, "manifest.yml");
+  const imagesLockFile = path.join(appWorkDir, "images.lock");
+  const imagesDir = path.join(appWorkDir, "images");
+  const blobsDir = path.join(imagesDir, "blobs", "sha256");
+
+  if (!(await fileExists(imagesLockFile))) {
+    return;
+  }
+
+  await ensureDirectory(imagesDir, "images");
+  await ensureFile(path.join(imagesDir, "index.json"), "images/index.json");
+
+  const manifestText = await readFile(manifestFile, "utf8");
+  const imagesLockText = await readFile(imagesLockFile, "utf8");
+  const index = JSON.parse(await readFile(path.join(imagesDir, "index.json"), "utf8"));
+
+  for (const entry of index.manifests ?? []) {
+    const alias = entry.annotations?.["org.opencontainers.image.ref.name"];
+    const manifestDigest = entry.digest;
+
+    if (!alias || !manifestDigest?.startsWith("sha256:")) {
+      throw new Error("images/index.json contains invalid embedded image entry");
+    }
+
+    const manifestBlob = path.join(blobsDir, manifestDigest.slice("sha256:".length));
+    await ensureFile(manifestBlob, `embedded image ${alias} manifest blob`);
+    const ociManifest = JSON.parse(await readFile(manifestBlob, "utf8"));
+    const configDigest = ociManifest.config?.digest;
+
+    if (!configDigest?.startsWith("sha256:")) {
+      throw new Error(`embedded image ${alias} is missing config digest`);
+    }
+
+    await ensureFile(
+      path.join(blobsDir, configDigest.slice("sha256:".length)),
+      `embedded image ${alias} config blob`,
+    );
+
+    if (!manifestText.includes(`embed:${alias}@${configDigest}`)) {
+      throw new Error(`manifest.yml does not reference embed:${alias}@${configDigest}`);
+    }
+
+    if (!imagesLockText.includes(`  ${alias}:`) || !imagesLockText.includes(`image_id: ${configDigest}`)) {
+      throw new Error(`images.lock does not record ${alias} ${configDigest}`);
+    }
+
+    for (const layer of ociManifest.layers ?? []) {
+      const digest = layer.digest;
+
+      if (!digest?.startsWith("sha256:")) {
+        throw new Error(`embedded image ${alias} has invalid layer digest`);
+      }
+
+      await ensureFile(
+        path.join(blobsDir, digest.slice("sha256:".length)),
+        `embedded image ${alias} layer blob`,
+      );
+    }
+  }
+}
+
+async function verifyLpk(lpkFile, label) {
+  const verifyDir = path.join(workDir, `${label}-verify`);
+
+  await rm(verifyDir, { force: true, recursive: true });
+  await mkdir(verifyDir, { recursive: true });
+  run("tar", ["-xf", lpkFile, "-C", verifyDir]);
+  await ensureFile(path.join(verifyDir, "manifest.yml"), `${label}.manifest.yml`);
+  await ensureFile(path.join(verifyDir, "package.yml"), `${label}.package.yml`);
+  const manifest = await readYaml(path.join(verifyDir, "manifest.yml"));
+  const remoteImages = lzcServiceImages(manifest, label);
+
+  if (remoteImages.length > 0) {
+    throw new Error(
+      `${label}.lpk contains non-embedded service images: ${remoteImages
+        .map((image) => `${image.serviceName}=${image.image}`)
+        .join(", ")}`,
+    );
+  }
+
+  await verifyEmbeddedImages(verifyDir);
+  await rm(verifyDir, { force: true, recursive: true });
 }
 
 async function buildLzcConfigLpk({
@@ -605,11 +818,12 @@ async function buildLzcConfigLpk({
     `${id}.lzc-build.yml manifest`,
   );
   await ensureFile(manifestFile, `${id}.manifest`);
+  const manifest = await readYaml(manifestFile);
+  const serviceImages = lzcServiceImages(manifest, id);
 
   await rm(appWorkDir, { force: true, recursive: true });
   await mkdir(appWorkDir, { recursive: true });
   await copyFile(packageFile, path.join(appWorkDir, "package.yml"));
-  await copyFile(manifestFile, path.join(appWorkDir, "manifest.yml"));
 
   const contentDirName = optionalString(
     config.contentdir,
@@ -641,8 +855,32 @@ async function buildLzcConfigLpk({
     path.join(appWorkDir, "deploy_params.yml"),
   );
 
-  const entries = (await readdir(appWorkDir)).sort();
-  run("tar", ["-C", appWorkDir, "-cf", lpkFile, ...entries]);
+  const embeddedImages = [];
+  const imageWorkDir = path.join(appWorkDir, ".image-work");
+
+  for (const serviceImage of serviceImages) {
+    embeddedImages.push(
+      await embedDockerImage({
+        id,
+        serviceName: serviceImage.serviceName,
+        image: serviceImage.image,
+        alias: serviceImage.alias,
+        appWorkDir,
+        imageWorkDir,
+      }),
+    );
+  }
+
+  await rm(imageWorkDir, { force: true, recursive: true });
+  const finalManifest =
+    embeddedImages.length > 0 ? rewriteManifestImages(manifest, embeddedImages) : manifest;
+  await writeFile(
+    path.join(appWorkDir, "manifest.yml"),
+    YAML.stringify(finalManifest),
+  );
+  await writeImagesLock(appWorkDir, embeddedImages);
+  await verifyEmbeddedImages(appWorkDir);
+  await tarDirectoryContents(appWorkDir, lpkFile);
 
   return buildFile;
 }
@@ -802,6 +1040,8 @@ async function buildLpks() {
         sha256,
       });
     }
+
+    await verifyLpk(lpkFile, id);
 
     entries.push({
       id,

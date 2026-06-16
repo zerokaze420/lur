@@ -179,7 +179,7 @@ apps:
 - `summary`：仓库页面上的短说明。
 - `categories`：搜索和分类标签。
 - `build.type`：`content` 会打包静态内容；`command` 会执行应用自己的构建命令；
-  `lzc` 会读取应用仓库的 `lzc-build.yml` 并手工打包基础 LPK。
+  `lzc` 会读取应用仓库的 `lzc-build.yml`，内嵌服务镜像并手工打包 LPK。
 - `build.command`：在应用源码目录内执行的构建命令。
 - `build.artifact`：构建完成后匹配 `.lpk` 的路径，必须匹配唯一文件。
 
@@ -281,9 +281,12 @@ application:
 
 - 当前手工构建器支持 content-only LPK，也支持 `build.type: lzc` 从
   `lzc-build.yml` 打包 `manifest`、`package.yml`、`contentdir`、`icon` 和
-  `lzc-deploy-params.yml`。
-- 带 embedded images 或自定义构建流程的 LPK 可以使用 `build.type: command`，
-  交给应用自己的 Nix 构建流程生成完整 `.lpk`。
+  `lzc-deploy-params.yml`，并把 `services.*.image` 指向的远程镜像转为包内
+  `images/` + `images.lock`。
+- 所有 LPK 在写入仓库索引前都会校验：`services.*.image` 必须是
+  `embed:<alias>@sha256:<digest>`，且 digest 必须能在包内 OCI blobs 找到。
+- 自定义构建流程的 LPK 可以使用 `build.type: command`，交给应用自己的 Nix
+  构建流程生成完整 `.lpk`，但产物仍必须通过内嵌镜像校验。
 - Release asset URL 是确定的：
   `https://github.com/<owner>/<repo>/releases/download/<app-id>-v<version>/<app-id>-<version>.lpk`.
 

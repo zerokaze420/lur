@@ -24,6 +24,8 @@
               pkgs.bun
               pkgs.git
               pkgs.nodejs_22
+              pkgs.python3
+              pkgs.skopeo
               pkgs.gnutar
               pkgs.coreutils
             ];
