@@ -460,17 +460,32 @@ function appInputHash({ id, sourceConfig, build, packageId, version, sourceHash 
   );
 }
 
-async function copyCachedLpk({ id, cacheLock, inputHash, fileName, lpkFile }) {
-  const cached = cacheLock.apps?.[id];
+async function copyCachedLpk({
+  id,
+  legacyId,
+  cacheLock,
+  inputHash,
+  fileName,
+  lpkFile,
+}) {
+  const cacheIds = [id, legacyId].filter(
+    (value, index, values) => value && values.indexOf(value) === index,
+  );
+  const cacheId = cacheIds.find((candidate) => {
+    const cached = cacheLock.apps?.[candidate];
 
-  if (
-    cached?.schema !== cacheSchema ||
-    cached.inputHash !== inputHash ||
-    cached.file !== fileName
-  ) {
+    return (
+      cached?.schema === cacheSchema &&
+      cached.inputHash === inputHash &&
+      cached.file === fileName
+    );
+  });
+
+  if (!cacheId) {
     return false;
   }
 
+  const cached = cacheLock.apps[cacheId];
   const cachedFile = path.join(cacheLpkDir, cached.cacheFile);
 
   try {
@@ -496,7 +511,7 @@ async function copyCachedLpk({ id, cacheLock, inputHash, fileName, lpkFile }) {
     return false;
   }
 
-  console.log(`cache hit: ${id}`);
+  console.log(`cache hit: ${cacheId}${cacheId === id ? "" : ` -> ${id}`}`);
   return true;
 }
 
@@ -1068,6 +1083,7 @@ async function buildLpks() {
 
       const cached = await copyCachedLpk({
         id: `${id}@${version}`,
+        legacyId: id,
         cacheLock,
         inputHash,
         fileName,
