@@ -1,6 +1,6 @@
-# LazyCat 第三方仓库
+# LazyCat 个人仓库
 
-这是一个基于 GitHub Actions 和 GitHub Pages 的 LazyCat 第三方 LPK
+这是一个基于 GitHub Actions 和 GitHub Pages 的 LazyCat 个人 LPK
 仓库模板。
 
 应用列表维护在 `apps.yml`。默认推荐引用远程 Git 源码并固定 commit `rev`，
@@ -25,7 +25,7 @@
 
 ```yml
 repository:
-  name: LazyCat 第三方仓库
+  name: LazyCat 个人仓库
   description: 基于 GitHub Pages 的 LazyCat 应用仓库。
   homepage: https://<owner>.github.io/<repo>/
   owner: <owner>

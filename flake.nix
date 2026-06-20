@@ -1,5 +1,5 @@
 {
-  description = "LazyCat third-party repository frontend and manual LPK builder";
+  description = "LazyCat personal repository frontend and manual LPK builder";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 

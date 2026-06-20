@@ -1112,7 +1112,7 @@ async function buildLpks() {
   const repositoryJson = {
     schema: "cloud.lazycat.third-party-repository.v1",
     repository: {
-      name: repository.name ?? "LazyCat Third-party Repository",
+      name: repository.name ?? "LazyCat Personal Repository",
       description: repository.description ?? "",
       homepage: pagesBaseUrl,
       source: `https://github.com/${repo}`,

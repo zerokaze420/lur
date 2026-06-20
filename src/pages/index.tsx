@@ -53,7 +53,7 @@ type RepositoryIndex = {
 const fallbackIndex: RepositoryIndex = {
   schema: "cloud.lazycat.third-party-repository.v1",
   repository: {
-    name: "LazyCat 第三方仓库",
+    name: "LazyCat 个人仓库",
     description: "基于 GitHub Pages 的 LazyCat 应用仓库。",
     homepage: "",
     source: "https://github.com/zerokaze420/lur",
@@ -130,6 +130,20 @@ function sourceHref(app: RepositoryApp, repositorySource: string) {
   return repositorySource;
 }
 
+function githubRepositoryName(source: string) {
+  try {
+    const url = new URL(source);
+
+    if (url.hostname !== "github.com") {
+      return source;
+    }
+
+    return url.pathname.replace(/^\/|\.git$|\/$/g, "");
+  } catch {
+    return source;
+  }
+}
+
 export default function IndexPage() {
   const { locale, t } = useI18n();
   const [index, setIndex] = useState<RepositoryIndex>(fallbackIndex);
@@ -203,6 +217,12 @@ export default function IndexPage() {
                 <dt className="text-default-500">{t("repository")}</dt>
                 <dd className="mt-1 font-medium text-foreground">
                   {index.repository.name}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-default-500">{t("githubRepository")}</dt>
+                <dd className="mt-1 break-all font-mono font-medium text-foreground">
+                  {githubRepositoryName(index.repository.source)}
                 </dd>
               </div>
               <div>
