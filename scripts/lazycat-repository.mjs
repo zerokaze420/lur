@@ -341,6 +341,37 @@ function normalizeBuild(app, id) {
   };
 }
 
+function normalizeVersionEntries(app, id) {
+  if (app.versions == null) {
+    return [
+      {
+        key: "default",
+        source: normalizeSource(app.source, id),
+      },
+    ];
+  }
+
+  if (!Array.isArray(app.versions) || app.versions.length === 0) {
+    throw new Error(`${id}.versions must be a non-empty array`);
+  }
+
+  return app.versions.map((entry, index) => {
+    if (typeof entry !== "object" || entry == null || Array.isArray(entry)) {
+      throw new Error(`${id}.versions[${index}] must be an object`);
+    }
+
+    const key =
+      typeof entry.key === "string" && entry.key.trim() !== ""
+        ? entry.key.trim()
+        : `v${index + 1}`;
+
+    return {
+      key,
+      source: normalizeSource(entry.source, `${id}.versions[${index}]`),
+    };
+  });
+}
+
 function normalizeSource(source, id) {
   if (typeof source === "string") {
     return {
@@ -1000,109 +1031,145 @@ async function buildLpks() {
 
     seenIds.add(id);
 
-    const sourceConfig = normalizeSource(app.source, id);
-    const source = await prepareSource(id, sourceConfig);
-
-    const packageFile = path.join(source, "package.yml");
-    await ensureFile(packageFile, `${id}.package.yml`);
-
     const build = normalizeBuild(app, id);
     const manifestName = build.manifest ?? app.manifest ?? "manifest.yml";
     const contentName = build.content ?? app.content ?? "content";
-    const manifestFile = path.join(source, manifestName);
-    const packageMeta = await readYaml(packageFile);
-    const packageId = requiredString(packageMeta.package, `${id}.package`);
-    const version = requiredString(packageMeta.version, `${id}.version`);
-    const name = requiredString(packageMeta.name, `${id}.name`);
-    const tag = `${id}-v${version}`;
-    const fileName = `${id}-${version}.lpk`;
-    const appWorkDir = path.join(workDir, id);
-    const lpkFile = path.join(lpkDir, fileName);
-    const sourceHash = await sourceDigest(source);
-    const inputHash = appInputHash({
-      id,
-      sourceConfig,
-      build,
-      packageId,
-      version,
-      sourceHash,
-    });
-    logBuildDecision(id, build.type, buildTypeAction(build.type));
+    const versionEntries = normalizeVersionEntries(app, id);
+    const releases = [];
+    let primaryAppMeta = null;
 
-    const cached = await copyCachedLpk({
-      id,
-      cacheLock,
-      inputHash,
-      fileName,
-      lpkFile,
-    });
+    for (const versionEntry of versionEntries) {
+      const variantId = `${id}@${versionEntry.key}`;
+      const sourceConfig = versionEntry.source;
+      const source = await prepareSource(variantId, sourceConfig);
+      const packageFile = path.join(source, "package.yml");
+      await ensureFile(packageFile, `${variantId}.package.yml`);
 
-    if (!cached) {
-      console.log(`cache miss: ${id}`);
-
-      if (build.type === "content") {
-        await buildContentLpk({
-          id,
-          source,
-          packageFile,
-          manifestFile,
-          contentDir: path.join(source, contentName),
-          appWorkDir,
-          lpkFile,
-        });
-      } else if (build.type === "command") {
-        await buildCommandLpk({ id, source, build, lpkFile });
-      } else if (build.type === "lzc") {
-        await buildLzcConfigLpk({
-          id,
-          source,
-          packageFile,
-          appWorkDir,
-          lpkFile,
-        });
-      } else {
-        throw new Error(`${id}.build.type must be "content", "command" or "lzc"`);
-      }
-    }
-
-    const size = Number(run("wc", ["-c", lpkFile]).split(/\s+/)[0]);
-    const sha256 = await sha256File(lpkFile);
-
-    if (!cached) {
-      await updateCachedLpk({
+      const manifestFile = path.join(source, manifestName);
+      const packageMeta = await readYaml(packageFile);
+      const packageId = requiredString(packageMeta.package, `${variantId}.package`);
+      const version = requiredString(packageMeta.version, `${variantId}.version`);
+      const name = requiredString(packageMeta.name, `${variantId}.name`);
+      const tag = `${id}-v${version}`;
+      const fileName = `${id}-${version}.lpk`;
+      const appWorkDir = path.join(workDir, `${id}-${version}`);
+      const lpkFile = path.join(lpkDir, fileName);
+      const sourceHash = await sourceDigest(source);
+      const inputHash = appInputHash({
         id,
+        sourceConfig,
+        build,
+        packageId,
+        version,
+        sourceHash,
+      });
+
+      logBuildDecision(variantId, build.type, buildTypeAction(build.type));
+
+      const cached = await copyCachedLpk({
+        id: `${id}@${version}`,
         cacheLock,
         inputHash,
         fileName,
         lpkFile,
-        size,
-        sha256,
+      });
+
+      if (!cached) {
+        console.log(`cache miss: ${variantId}`);
+
+        if (build.type === "content") {
+          await buildContentLpk({
+            id: variantId,
+            source,
+            packageFile,
+            manifestFile,
+            contentDir: path.join(source, contentName),
+            appWorkDir,
+            lpkFile,
+          });
+        } else if (build.type === "command") {
+          await buildCommandLpk({ id: variantId, source, build, lpkFile });
+        } else if (build.type === "lzc") {
+          await buildLzcConfigLpk({
+            id: variantId,
+            source,
+            packageFile,
+            appWorkDir,
+            lpkFile,
+          });
+        } else {
+          throw new Error(`${id}.build.type must be "content", "command" or "lzc"`);
+        }
+      }
+
+      const size = Number(run("wc", ["-c", lpkFile]).split(/\s+/)[0]);
+      const sha256 = await sha256File(lpkFile);
+
+      if (!cached) {
+        await updateCachedLpk({
+          id: `${id}@${version}`,
+          cacheLock,
+          inputHash,
+          fileName,
+          lpkFile,
+          size,
+          sha256,
+        });
+      }
+
+      await verifyLpk(lpkFile, variantId);
+
+      if (!primaryAppMeta) {
+        primaryAppMeta = {
+          package: packageId,
+          name,
+          version,
+          description: packageMeta.description ?? "",
+          summary: app.summary ?? packageMeta.description ?? "",
+          categories: Array.isArray(app.categories) ? app.categories : [],
+          min_os_version: packageMeta.min_os_version ?? "",
+          homepage: packageMeta.homepage ?? "",
+          license: packageMeta.license ?? "",
+          author: packageMeta.author ?? "",
+          locales: packageMeta.locales ?? {},
+          source: repositorySource(sourceConfig),
+        };
+      }
+
+      releases.push({
+        key: versionEntry.key,
+        version,
+        source: repositorySource(sourceConfig),
+        release: {
+          tag,
+          file: fileName,
+          size,
+          sha256,
+          download_url: githubReleaseUrl(repo, tag, fileName),
+        },
       });
     }
 
-    await verifyLpk(lpkFile, id);
+    if (!primaryAppMeta) {
+      throw new Error(`${id} did not produce any release`);
+    }
 
     entries.push({
       id,
-      package: packageId,
-      name,
-      version,
-      description: packageMeta.description ?? "",
-      summary: app.summary ?? packageMeta.description ?? "",
-      categories: Array.isArray(app.categories) ? app.categories : [],
-      min_os_version: packageMeta.min_os_version ?? "",
-      homepage: packageMeta.homepage ?? "",
-      license: packageMeta.license ?? "",
-      author: packageMeta.author ?? "",
-      locales: packageMeta.locales ?? {},
-      release: {
-        tag,
-        file: fileName,
-        size,
-        sha256,
-        download_url: githubReleaseUrl(repo, tag, fileName),
-      },
-      source: repositorySource(sourceConfig),
+      package: primaryAppMeta.package,
+      name: primaryAppMeta.name,
+      version: primaryAppMeta.version,
+      description: primaryAppMeta.description,
+      summary: primaryAppMeta.summary,
+      categories: primaryAppMeta.categories,
+      min_os_version: primaryAppMeta.min_os_version,
+      homepage: primaryAppMeta.homepage,
+      license: primaryAppMeta.license,
+      author: primaryAppMeta.author,
+      locales: primaryAppMeta.locales,
+      release: releases[0].release,
+      releases,
+      source: primaryAppMeta.source,
       build: {
         type: build.type,
       },

@@ -251,6 +251,36 @@ file: <app-id>-<version>.lpk
 每次需要生成新的 release tag 和历史下载项时，递增应用仓库 `package.yml` 里的
 `version`，更新 `apps.yml` 的 `source.rev`，再提交新的 PR。
 
+如果需要在仓库页面里手动切换同一个应用的多个版本，可以为应用配置 `versions:`：
+
+```yml
+apps:
+  - id: attic
+    summary: 带轻量 Web 控制台的 Nix 二进制缓存服务器。
+    categories:
+      - developer
+      - cache
+      - nix
+    build:
+      type: command
+      command:
+        - nix
+        - build
+        - .#lpk
+      artifact: result/*.lpk
+    versions:
+      - key: stable
+        source:
+          git: https://github.com/zerokaze420/lazy-attic.git
+          rev: 402385eb48c8af545dda8099c65f8d3ef19eaf38
+      - key: previous
+        source:
+          git: https://github.com/zerokaze420/lazy-attic.git
+          rev: <older-commit>
+```
+
+页面会显示版本选择框；每个版本仍然会独立生成自己的 release tag 和 `.lpk` 文件。
+
 ### 本地 content-only 应用
 
 纯静态示例或极小应用也可以继续放在本仓库 `apps/<app-id>/` 下，由脚本手工打包。

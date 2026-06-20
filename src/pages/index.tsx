@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Card, Chip, Input, Link, Separator } from "@heroui/react";
+import { Card, Chip, Input, Link, ListBox, Select, Separator } from "@heroui/react";
 
 import { useI18n } from "@/i18n";
 import DefaultLayout from "@/layouts/default";
@@ -10,6 +10,20 @@ type ReleaseInfo = {
   size: number;
   sha256: string;
   download_url: string;
+};
+
+type AppRelease = {
+  key: string;
+  version: string;
+  source:
+    | string
+    | {
+        type: "git";
+        url: string;
+        rev?: string;
+        ref?: string;
+      };
+  release: ReleaseInfo;
 };
 
 type RepositoryApp = {
@@ -26,6 +40,7 @@ type RepositoryApp = {
   author: string;
   locales?: Record<string, { name?: string; description?: string }>;
   release: ReleaseInfo;
+  releases?: AppRelease[];
   source:
     | string
     | {
@@ -130,6 +145,18 @@ function sourceHref(app: RepositoryApp, repositorySource: string) {
   return repositorySource;
 }
 
+function releaseSourceHref(release: AppRelease, fallbackSource: string) {
+  if (typeof release.source === "object" && release.source.type === "git") {
+    return release.source.url;
+  }
+
+  if (typeof release.source === "string") {
+    return fallbackSource;
+  }
+
+  return fallbackSource;
+}
+
 function githubRepositoryName(source: string) {
   try {
     const url = new URL(source);
@@ -149,6 +176,7 @@ export default function IndexPage() {
   const [index, setIndex] = useState<RepositoryIndex>(fallbackIndex);
   const [query, setQuery] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [selectedReleases, setSelectedReleases] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -194,6 +222,29 @@ export default function IndexPage() {
         .includes(term);
     });
   }, [index.apps, locale, query]);
+
+  const activeReleaseByApp = useMemo(() => {
+    return Object.fromEntries(
+      index.apps.map((app) => {
+        const releases =
+          app.releases && app.releases.length > 0
+            ? app.releases
+            : [
+                {
+                  key: "default",
+                  version: app.version,
+                  source: app.source,
+                  release: app.release,
+                },
+              ];
+        const selectedKey = selectedReleases[app.id];
+        const active =
+          releases.find((item) => item.key === selectedKey) ?? releases[0];
+
+        return [app.id, active];
+      }),
+    );
+  }, [index.apps, selectedReleases]);
 
   return (
     <DefaultLayout>
@@ -294,6 +345,47 @@ export default function IndexPage() {
                   </div>
                   <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
                     <div>
+                      <dt className="text-default-500">{t("releaseVersion")}</dt>
+                      <dd className="mt-1 text-foreground">
+                        <Select
+                          className="max-w-52"
+                          selectedKey={activeReleaseByApp[app.id].key}
+                          onSelectionChange={(value) => {
+                            if (typeof value === "string") {
+                              setSelectedReleases((current) => ({
+                                ...current,
+                                [app.id]: value,
+                              }));
+                            }
+                          }}
+                        >
+                          <Select.Trigger>
+                            <Select.Value />
+                            <Select.Indicator />
+                          </Select.Trigger>
+                          <Select.Popover>
+                            <ListBox aria-label={`${app.name} versions`}>
+                              {(app.releases && app.releases.length > 0
+                                ? app.releases
+                                : [
+                                    {
+                                      key: "default",
+                                      version: app.version,
+                                      source: app.source,
+                                      release: app.release,
+                                    },
+                                  ]
+                              ).map((item) => (
+                                <ListBox.Item id={item.key} key={item.key} textValue={item.version}>
+                                  v{item.version}
+                                </ListBox.Item>
+                              ))}
+                            </ListBox>
+                          </Select.Popover>
+                        </Select>
+                      </dd>
+                    </div>
+                    <div>
                       <dt className="text-default-500">{t("packageId")}</dt>
                       <dd className="mt-1 break-all font-mono text-foreground">
                         {app.package}
@@ -302,7 +394,7 @@ export default function IndexPage() {
                     <div>
                       <dt className="text-default-500">SHA256</dt>
                       <dd className="mt-1 break-all font-mono text-foreground">
-                        {shortSha(app.release.sha256)}
+                        {shortSha(activeReleaseByApp[app.id].release.sha256)}
                       </dd>
                     </div>
                     <div>
@@ -314,7 +406,10 @@ export default function IndexPage() {
                     <div>
                       <dt className="text-default-500">{t("size")}</dt>
                       <dd className="mt-1 text-foreground">
-                        {formatBytes(app.release.size, t("pending"))}
+                        {formatBytes(
+                          activeReleaseByApp[app.id].release.size,
+                          t("pending"),
+                        )}
                       </dd>
                     </div>
                   </dl>
@@ -323,13 +418,16 @@ export default function IndexPage() {
                 <div className="flex items-start gap-3 lg:flex-col">
                   <Link
                     className="inline-flex min-h-10 items-center rounded-medium bg-primary px-4 text-sm font-semibold text-primary-foreground"
-                    href={app.release.download_url}
+                    href={activeReleaseByApp[app.id].release.download_url}
                   >
                     {t("downloadLpk")}
                   </Link>
                   <Link
                     className="inline-flex min-h-10 items-center rounded-medium border border-default-300 px-4 text-sm font-semibold text-default-700"
-                    href={sourceHref(app, index.repository.source)}
+                    href={releaseSourceHref(
+                      activeReleaseByApp[app.id],
+                      sourceHref(app, index.repository.source),
+                    )}
                     rel="noopener noreferrer"
                     target="_blank"
                   >

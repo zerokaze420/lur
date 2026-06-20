@@ -67,7 +67,7 @@ jobs:
       - name: Collect release metadata
         id: collect
         run: |
-          node -e "const fs=require('fs'); const repo=JSON.parse(fs.readFileSync('dist/repository.json','utf8')); fs.appendFileSync(process.env.GITHUB_OUTPUT, 'apps='+JSON.stringify(repo.apps)+'\n')"
+          node -e "const fs=require('fs'); const repo=JSON.parse(fs.readFileSync('dist/repository.json','utf8')); const releases=repo.apps.flatMap(app => (app.releases?.length ? app.releases : [{ key: 'default', version: app.version, release: app.release }]).map(item => ({ id: app.id, package: app.package, name: app.name, version: item.version, release: item.release }))); fs.appendFileSync(process.env.GITHUB_OUTPUT, 'apps='+JSON.stringify(releases)+'\n')"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
